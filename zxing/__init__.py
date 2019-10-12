@@ -11,6 +11,7 @@
 
 __version__ = '0.3'
 import subprocess, re, os
+import shlex
 
 class BarCodeReader():
   location = ""
@@ -27,27 +28,46 @@ class BarCodeReader():
 
     self.location = loc
 
-  def decode(self, files, try_harder = False, qr_only = False):
+  def list_formats(self):
+      return ["UPC_A",
+                "UPC_E",
+                "EAN_13",
+                "EAN_8",
+                "RSS_14",
+                "RSS_EXPANDED",
+                "CODE_39",
+                "CODE_93",
+                "CODE_128",
+                "ITF",
+                "QR_CODE",
+                "DATA_MATRIX",
+                "AZTEC",
+                "PDF_417",
+                "CODABAR",
+                "MAXICODE"]
+
+#NOTE: possible_formats should be a comma-separated list
+  def decode(self, file_name, multi=True, pure=False, possible_formats=None):
+    if type(file_name) == type(list()):
+      raise Exception("Only a single file argument is accepted")
     cmd = [self.command]
     cmd += self.args[:] #copy arg values
-    if try_harder:
-      cmd.append("--try_harder")
-    if qr_only:
-      cmd.append("--possibleFormats=QR_CODE")
+    if multi:
+      cmd.append("--multi")
+    if possible_formats is not None:
+      cmd.append("--possible_formats " + possible_formats)
+    if pure:
+      cmd.append("--pure_barcode")
+    cmd.append("--try_harder")
 
     libraries = [self.location + "/" + l for l in self.libs]
 
     cmd = [ c if c != "LIBS" else os.pathsep.join(libraries) for c in cmd ]
 
-    # send one file, or multiple files in a list
-    SINGLE_FILE = False
-    if type(files) != type(list()):
-      cmd.append(files)
-      SINGLE_FILE = True
-    else:
-      cmd += files
+    cmd.append(file_name)
+    cmd = ' '.join(cmd)
 
-    (stdout, stderr) = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True).communicate()
+    (stdout, stderr) = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, universal_newlines=True).communicate()
     codes = []
     file_results = stdout.split("\nfile:")
     for result in file_results:
@@ -57,11 +77,7 @@ class BarCodeReader():
         continue
 
       codes.append(BarCode(result))
-
-    if SINGLE_FILE:
-      return codes[0]
-    else:
-      return codes
+    return codes
 
 #this is the barcode class which has
 class BarCode:
