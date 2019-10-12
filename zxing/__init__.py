@@ -12,6 +12,9 @@
 __version__ = '0.3'
 import subprocess, re, os
 import shlex
+import tempfile
+from contextlib import contextmanager
+import cv2
 
 class BarCodeReader():
   location = ""
@@ -46,9 +49,18 @@ class BarCodeReader():
                 "CODABAR",
                 "MAXICODE"]
 
-#NOTE: possible_formats should be a comma-separated list
-  def decode(self, file_name, multi=True, pure=False, possible_formats=None):
-    if type(file_name) == type(list()):
+  @contextmanager
+  def _temp_ramfile_input(self, img):
+      temp_name = tempfile.mktemp(suffix=".png", dir="/dev/shm")
+      cv2.imwrite(temp_name, img)
+      try:
+          yield temp_name
+      finally:
+          os.unlink(temp_name)
+
+  #NOTE: possible_formats should be a comma-separated list
+  def decode(self, img, multi=True, pure=False, possible_formats=None):
+    if type(img) is not str and type(img[0]) is str:
       raise Exception("Only a single file argument is accepted")
     cmd = [self.command]
     cmd += self.args[:] #copy arg values
@@ -64,10 +76,18 @@ class BarCodeReader():
 
     cmd = [ c if c != "LIBS" else os.pathsep.join(libraries) for c in cmd ]
 
-    cmd.append(file_name)
-    cmd = ' '.join(cmd)
+    stdout=None
+    stderr=None
+    if type(img) is not str: #then assume it's a writeable image
+        with self._temp_ramfile_input(img) as file_name:
+            cmd.append(file_name)
+            cmd = ' '.join(cmd)
+            (stdout, stderr) = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, universal_newlines=True).communicate()
+    else:
+        cmd.append(img)
+        cmd = ' '.join(cmd)
+        (stdout, stderr) = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, universal_newlines=True).communicate()
 
-    (stdout, stderr) = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, universal_newlines=True).communicate()
     codes = []
     file_results = stdout.split("\nfile:")
     for result in file_results:
