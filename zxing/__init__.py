@@ -20,7 +20,9 @@ class BarCodeReader():
   location = ""
   command = "java"
   libs = ["javase/target/javase-3.4.0-jar-with-dependencies.jar"]
-  args = ["-cp", "LIBS", "com.google.zxing.client.j2se.CommandLineRunner"]
+  args = ["-cp", "LIBS",
+          "-Djava.awt.headless=true",
+          "com.google.zxing.client.j2se.CommandLineRunner"]
 
   def __init__(self, loc=""):
     if not len(loc):
