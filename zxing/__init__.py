@@ -60,6 +60,50 @@ class BarCodeReader():
       finally:
           os.unlink(temp_name)
 
+  @contextmanager
+  def _temp_file_from_bytes(self, img_bytes):
+      temp_name = tempfile.mktemp(dir="/dev/shm") #extension doesn't matter
+      with open(temp_name, 'wb') as output:
+          output.write(img_bytes)
+      try:
+          yield temp_name
+      finally:
+          #time.sleep(0.5)
+          os.unlink(temp_name)
+
+  def decode_bytes(self, img_bytes, multi=True, pure=False, possible_formats=None):
+    cmd = [self.command]
+    cmd += self.args[:] #copy arg values
+    if multi:
+      cmd.append("--multi")
+    if possible_formats is not None:
+      cmd.append("--possible_formats " + possible_formats)
+    if pure:
+      cmd.append("--pure_barcode")
+    cmd.append("--try_harder")
+
+    libraries = [self.location + "/" + l for l in self.libs]
+
+    cmd = [ c if c != "LIBS" else os.pathsep.join(libraries) for c in cmd ]
+
+    stdout=None
+    stderr=None
+    with self._temp_file_from_bytes(img_bytes) as file_name:
+        cmd.append(file_name)
+        cmd = ' '.join(cmd)
+        (stdout, stderr) = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, universal_newlines=True).communicate()
+
+    codes = []
+    file_results = stdout.split("\nfile:")
+    for result in file_results:
+      lines = stdout.split("\n")
+      if re.search("No barcode found", lines[0]):
+        codes.append(None)
+        continue
+
+      codes.append(BarCode(result))
+    return codes
+
   #NOTE: possible_formats should be a comma-separated list
   def decode(self, img, multi=True, pure=False, possible_formats=None):
     if type(img) is not str and type(img[0]) is str:
